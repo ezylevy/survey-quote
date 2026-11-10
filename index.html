@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="he" dir="rtl" class="display-bold">
+<head>
+<meta charset="utf-8">
+<script>
+/* ==========================================================================
+   מחירים · כאן משנים הכול
+   --------------------------------------------------------------------------
+   כל המספרים כאן הועתקו מ״תעריף תכנון מסילות״ של רכבת ישראל,
+   מהדורה 13.3.5 (ינואר 2025), פרק 3: מדידות ומיפוי (עמודים 27 עד 35).
+   מספר הסעיף בתעריף כתוב ליד כל בלוק.
+   כל המחירים בשקלים, לפני מע״מ, צמודים למדד המחירים לצרכן של ינואר 2016.
+   ========================================================================== */
+const PRICES = {
+  source: "תעריף תכנון מסילות של רכבת ישראל · מהדורה 13.3.5 · ינואר 2025 · פרק 3: מדידות ומיפוי",
+  vatRate: 0.18,                 // מע״מ 18%, נכון ל-1.1.2025
+  cpiBaseMonth: "ינואר 2016",    // מדד הבסיס של התעריף
+  vatOnExpenses: false,          // true = להוסיף מע״מ גם על הוצאות להחזר (אגרות מפ״י / מודד מבקר)
+
+  /* ---------- סעיף 3.2 · מדידות לצרכי תכנון ראשוני ומוקדם (עמ׳ 27-28) ---------- */
+  photo: {
+    section: "3.2",
+    title: "מדידות לצרכי תכנון ראשוני ומוקדם (פוטוגרמטריה)",
+    rates: [                                   // מחיר בסיס למיפוי פוטוגרמטרי, לק״מ
+      { scale: "1:250",   strip: 100, perKm: 6000 },
+      { scale: "1:250",   strip: 200, perKm: 9100 },
+      { scale: "1:500",   strip: 100, perKm: 3400 },
+      { scale: "1:500",   strip: 200, perKm: 4800 },
+      { scale: "1:1,250", strip: 200, perKm: 3200 },
+      { scale: "1:1,250", strip: 400, perKm: 6300 },
+      { scale: "1:1,250", strip: 600, perKm: 8800 },
+      { scale: "1:2,500", strip: 400, perKm: 3300 },
+      { scale: "1:2,500", strip: 600, perKm: 5300 }
+    ],
+    scale1000PricedAs: "1:1,250",              // ״מדידות בקנ״מ 1:1,000 יבוצעו במחיר זהה ל-1:1,250״
+    extraPerDunam: { "1:250": 40, "1:500": 18, "1:1,250": 12, "1:2,500": 6 },  // דונמים החורגים מהרצועה
+    minimumTask: 13000,                        // מחיר מינימום למטלה למיפוי פוטוגרמטרי
+    minimumDunamsOnly: 1800,                   // אם החישוב לפי דונמים בלבד, מינימום להזמנת עבודה
+    mappingTypes: [
+      { label: "מיפוי מלא", pct: 1 },
+      { label: "עדכון מיפוי על בסיס טיסה עדכנית", pct: 0.70 },
+      { label: "פוטוגרמטריה על בסיס טיסה ישנה", pct: 0.85 },
+      { label: "עיבוד לאורתופוטו בלבד, מתצלומי אוויר עדכניים (בלי מיפוי פוטוגרמטרי)", pct: 0.30, noMinimum: true }
+    ],
+    complexity: {                              // לא יותר ממקדם אחד על אותו תא שטח
+      built: { label: "שטח בנוי", factor: 1.35 },
+      hilly: { label: "שטח הררי (שיפוע ממוצע מעל 12%)", factor: 1.25 }
+    },
+    flightZones: [                             // תוספות לטיסה, בלי מקדמי מורכבות
+      { label: "פחות מ-55 ק״מ מחיפה (אין תוספת)", perFlight: 0 },
+      { label: "55 עד 75 ק״מ מחיפה (דרומית לנתניה)", perFlight: 1000 },
+      { label: "75 עד 105 ק״מ מחיפה (בין נתניה לתל אביב)", perFlight: 3000 },
+      { label: "מעל 105 ק״מ מחיפה (דרומית לתל אביב)", perFlight: 4500 },
+      { label: "דרומית למצפה רמון", perFlight: 10000 }
+    ],
+    greenLinePerFlight: 675                    // תוספת למיפוי מעבר לקו הירוק, לטיסה
+  },
+
+  /* ---------- סעיף 3.3 · מדידות לצרכי תכנון מפורט (עמ׳ 29-30) ---------- */
+  ground: {
+    section: "3.3",
+    title: "מדידות לצרכי תכנון מפורט (מיפוי קרקעי)",
+    controlPerKm: 6500,                        // רשת בקרה לק״מ תוואי
+    trackMarkPerKm: 3000,                      // סימון ואיזון תוואי מסילה קיימת, לק״מ מסילה
+    extraTrackPct: 0.50,                       // כל מסילה נוספת: +50%
+    perTurnout: 120,                           // מפלגים, לכל סוגי המפלגים
+    surveys: [                                 // מדידה קרקעית מלאה
+      { id: "s250e", scale: "1:250", label: "תוואי מסילה קיימת, בודדת או רב מסילתית (רצועה של 120 מ׳)", perKm: 12000, extraPerDunam: 55 },
+      { id: "s250p", scale: "1:250", label: "תוואי מתוכנן ללא מסילה (רצועה של 120 מ׳)", perKm: 6600 },
+      { id: "s500e", scale: "1:500", label: "תוואי מסילה קיימת, בודדת או רב מסילתית (רצועה של 120 מ׳)", perKm: 10200, extraPerDunam: 45 },
+      { id: "s500p", scale: "1:500", label: "תוואי מתוכנן ללא מסילה (רצועה של 120 מ׳)", perKm: 5600 }
+    ],
+    updatePct: 0.60,                           // מטלה לעדכון מיפוי קרקעי: 60% ממיפוי מלא
+    complexity: [                              // חלים על סעיפים 3-4 בטבלה (המדידה הקרקעית המלאה)
+      { label: "שטח הררי", factor: 2.0 },
+      { label: "שטח בנוי בדלילות", factor: 1.5 },
+      { label: "שטח בנוי בצפיפות", factor: 2.0 },
+      { label: "שטחים חקלאיים עם צמחייה", factor: 1.2 },
+      { label: "שטחי מטעים / יערות", factor: 1.5 },
+      { label: "תנועת רכבות פעילה", factor: 1.4 }
+    ]
+  },
+
+  /* ---------- סעיף 3.4 · מדידות לצרכי הכנת סקר עצים (עמ׳ 31) ---------- */
+  trees: {
+    section: "3.4",
+    title: "מדידות לצרכי הכנת סקר עצים",
+    items: [
+      { id: "early",        stage: "תכנון מוקדם", label: "מפה עם פוליגונים / קבוצות עצים / עצים ייחודיים, טבלת Excel וסימון בשטח", perTree: 30 },
+      { id: "detailAll",    stage: "תכנון מפורט", label: "מפה עם כל העצים, טבלת Excel וסימון העצים בשטח", perTree: 100 },
+      { id: "detailGroups", stage: "תכנון מפורט", label: "מפה עם פוליגונים / קבוצות עצים, Excel וסימון בשטח", perTree: 30 }
+    ],
+    minimum: 5000,                             // מחיר מינימום למדידה לסקר עצים
+    complexity: [
+      { label: "שטח הררי", factor: 2.0 },
+      { label: "שטח בנוי בדלילות", factor: 1.5 },
+      { label: "שטח בנוי בצפיפות", factor: 2.0 },
+      { label: "שטחים חקלאיים עם צמחייה צפופה", factor: 1.2 },
+      { label: "שטחי מטעים / יערות", factor: 1.5 },
+      { label: "תנועת רכבות פעילה", factor: 1.4 }
+    ]
+  },
+
+  /* ---------- סעיף 3.5 + 3.5.1 · קו כחול אנליטי ותת״ג (עמ׳ 32-34) ---------- */
+  blue: {
+    section: "3.5",
+    title: "הכנת קו כחול אנליטי ותת״ג",
+    fieldPerGush: 3500,                        // סעיף 1: מפת גבול, עבודת שדה
+    officePerGush: 5100,                       // סעיף 2: מפת גבול, עבודת משרד
+    perExtraParcel: 550,                       // סעיף 3: תוספת לחלקה מעל חלקה ראשונה
+    tatagPerGush: 8000,                        // סעיף 4: אישור תת״ג במפ״י (בלי עלות הביקורת)
+    reviewerDiscount: 0.10,                    // מודד מבקר: עלויות טבלה 24 בהנחה של 10%
+    classes: [                                 // סעיף 3.5.1: מקדם מהמחירון לכל רכיב (0 = לא משולם)
+      { id: "full",     label: "אין חומר ביסוס מתאים (לפי מחירון)",                          field: 1,    office: 1,    parcel: 1,    tatag: 1 },
+      { id: "c1kmk",    label: "1 · גוש מבוסס קמ״ק",                                          field: 0,    office: 0.5,  parcel: 0.5,  tatag: 0 },
+      { id: "c1hesder", label: "1 · גוש מבוסס הסדר, רשת תקפה",                                field: 0,    office: 0.5,  parcel: 0.5,  tatag: 0 },
+      { id: "c21",      label: "2.1 · כל התצ״רים בגוש על רשת תקפה, כל הנקודות מיטביות",       field: 0.85, office: 0.85, parcel: 0.85, tatag: 0 },
+      { id: "c22",      label: "2.2 · כל התצ״רים בגוש על רשת תקפה, חלק מהנקודות לא מיטביות", field: 1,    office: 1,    parcel: 1,    tatag: 1 },
+      { id: "c3",       label: "3 · תצ״ר רשת ישנה וחישוב פנקסי שדה",                          field: 1,    office: 1,    parcel: 1,    tatag: 1 }
+    ],
+    milestones: {                              // אבני דרך לתשלום
+      withTatag: [
+        { label: "פגישת התנעה והשלמת איסוף חומר קדסטרלי", pct: 0.10 },
+        { label: "חישוב אנליטי של תחום המטלה והשלמת מדידות לצורכי התמרת גבולות ושחזור גבולות", pct: 0.40 },
+        { label: "אישור תחום הקו הכחול על ידי הרכבת", pct: 0.20 },
+        { label: "אישור תת״ג על ידי מפ״י", pct: 0.30 }
+      ],
+      withoutTatag: [
+        { label: "פגישת התנעה והשלמת איסוף חומר קדסטרלי", pct: 0.10 },
+        { label: "חישוב אנליטי של תחום המטלה והשלמת מדידות לצורכי התמרת גבולות ושחזור גבולות", pct: 0.50 },
+        { label: "אישור תחום הקו הכחול על ידי הרכבת", pct: 0.40 }
+      ]
+    }
+  },
+
+  /* ---------- סעיף 3.6 · הכנת קומפילציה סטטוטורית (עמ׳ 34) ---------- */
+  comp: {
+    section: "3.6",
+    title: "הכנת קומפילציה סטטוטורית",
+    areaBrackets: [                            // מדורג: כל מדרגה מחויבת בתעריף שלה. null = ״מעל״
+      { upTo: 100, rate: 20 }, { upTo: 200, rate: 15 }, { upTo: 500, rate: 10 }, { upTo: null, rate: 5 }
+    ],
+    areaMax: 20000,                            // תעריף מקסימלי לשטח קומפילציה
+    planBrackets: [
+      { upTo: 10, rate: 550 }, { upTo: 20, rate: 500 }, { upTo: 30, rate: 450 }, { upTo: null, rate: 400 }
+    ],
+    minimum: 7000                              // מחיר מינימום לקומפילציה
+  },
+
+  /* ---------- סעיף 3.7 · שכר לפי תשומות (עמ׳ 35) ---------- */
+  inputs: {
+    section: "3.7",
+    title: "שכר לפי תשומות",
+    items: [
+      { id: "fieldDay",     label: "יום קבוצת שדה", unit: "ימים", rate: 3500 },
+      { id: "officeDay",    label: "יום משרד", unit: "ימים", rate: 1600 },
+      { id: "comboDay",     label: "יום משולב", unit: "ימים", rate: 5100 },
+      { id: "surveyorHour", label: "שעת מודד מוסמך", unit: "שעות", rate: 260 },
+      { id: "officeHour",   label: "שעת עבודות משרד (טכנאי / שרטט: חישובים ושרטוטים)", unit: "שעות", rate: 180 }
+    ]
+  }
+};
+/* ======================= סוף המחירים · מכאן קוד הדף ======================= */
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1b2a">
+<title>מחשבון תעריף מדידות</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&family=Secular+One&display=swap" rel="stylesheet">
+<style>
+:root{
+  --night:#0d1b2a; --night-2:#13263a; --night-3:#1e3a56; --panel:#0a1420;
+  --amber:#ffb547; --amber-soft:#ffe0a8; --sky:#8fd0ff;
+  --paper:#f7f5ef; --paper-2:#ece8dc; --ink:#172334; --ink-soft:#4b5869; --rule:#d6d0c0;
+  --st:#0f766e; --st-soft:#e3f1ef; --ok:#136c3a; --bad:#a3202c;
+  --bar-h:78px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--night);color:var(--paper);font-family:Assistant,system-ui,sans-serif;
+  font-size:1.125rem;line-height:1.6;padding-bottom:calc(var(--bar-h) + 24px)}
+.skip{position:absolute;inset-inline-start:12px;top:-60px;background:var(--amber);color:var(--ink);padding:8px 14px;border-radius:8px;font-weight:700;z-index:20}
+.skip:focus{top:12px}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.card :focus-visible{outline-color:var(--st)}
+.wrap{max-width:900px;margin:0 auto;padding:40px 24px 24px}
+
+.kicker{font-family:"JetBrains Mono",monospace;font-size:.78rem;letter-spacing:.16em;color:var(--amber);text-transform:uppercase}
+h1{font-family:"Secular One",Assistant,sans-serif;font-weight:400;font-size:calc(clamp(3rem,8vw,4.4rem)*.8);line-height:1;margin:.25em 0 .3em;color:var(--amber-soft)}
+h1 span{display:block;color:#fff}
+.sub{margin:0 0 22px;color:#c9d3de;font-size:1.08rem}
+.sub b{color:var(--amber)}
+
+.stepper{list-style:none;margin:0 0 18px;padding:0;display:flex;gap:6px;flex-wrap:wrap}
+.stepper li{flex:1 1 0;min-width:0}
+.stepper button{width:100%;display:flex;align-items:center;gap:8px;background:var(--night-2);color:#c9d3de;border:1px solid var(--night-3);
+  border-radius:999px;padding:6px 10px 6px 6px;font:inherit;font-size:.9rem;font-weight:600;cursor:pointer;min-height:44px;text-align:start}
+.stepper button:disabled{cursor:not-allowed;opacity:.5}
+.stepper .n{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--night-3);color:#fff;
+  font-family:"JetBrains Mono",monospace;font-size:.85rem;font-weight:700}
+.stepper .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stepper .done .n{background:#7ee2a8;color:#06240f}
+.stepper [aria-current="step"]{background:var(--amber);color:var(--ink);border-color:var(--amber)}
+.stepper [aria-current="step"] .n{background:var(--ink);color:var(--amber)}
+
+.card{background:var(--paper);color:var(--ink);border-radius:12px;padding:28px 28px 24px;box-shadow:0 24px 50px rgba(0,0,0,.4);
+  border-inline-start:8px solid var(--st)}
+.card h2{font-family:"Secular One",Assistant,sans-serif;font-weight:400;font-size:1.9rem;line-height:1.15;margin:0 0 6px}
+.card h2:focus{outline:none}
+.tag{font-family:"JetBrains Mono",monospace;font-size:.76rem;letter-spacing:.14em;color:var(--st);font-weight:700}
+.lede{color:var(--ink-soft);margin:0 0 18px;font-size:1.04rem}
+.hint{color:var(--ink-soft);font-size:.9rem;margin:4px 0 0}
+.num{direction:ltr;unicode-bidi:isolate;font-family:"JetBrains Mono",monospace;white-space:nowrap}
+
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.pick{position:relative;display:flex;flex-direction:column;gap:4px;text-align:start;border:2px solid var(--rule);background:#fff;border-radius:10px;
+  padding:14px 16px;cursor:pointer;font:inherit;color:inherit;min-height:44px;transition:border-color .2s,transform .2s,box-shadow .2s}
+.pick:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(23,35,52,.08)}
+.pick b{font-size:1.15rem;line-height:1.3;padding-inline-end:34px}
+.pick .sec{font-family:"JetBrains Mono",monospace;font-size:.75rem;color:var(--st);font-weight:700;letter-spacing:.08em}
+.pick .unit-line{margin-top:4px;font-size:.88rem;color:var(--st);font-weight:700}
+.pick .box{position:absolute;inset-inline-end:14px;top:14px;width:24px;height:24px;border-radius:6px;border:2px solid var(--rule);background:#fff;
+  display:grid;place-items:center;font-size:.9rem;color:#fff}
+.pick[aria-pressed="true"]{border-color:var(--st);background:var(--st-soft)}
+.pick[aria-pressed="true"] .box{background:var(--st);border-color:var(--st)}
+.pick[aria-pressed="true"] .box::after{content:"✓";font-weight:800}
+
+.group{background:#fff;border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin:0 0 14px}
+.group h3{margin:0 0 4px;font-size:1.15rem;display:flex;align-items:center;gap:10px}
+.group h3::before{content:"";width:9px;height:9px;background:var(--st);transform:rotate(45deg);flex:none}
+.group > .hint:first-of-type{margin-bottom:10px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 16px;margin-top:10px}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field.full{grid-column:1 / -1}
+.field label,.legend{font-weight:700;font-size:1rem}
+.legend{padding:0;margin-bottom:4px}
+.price-tag{font-weight:400;color:var(--st);font-size:.88rem}
+input[type=text],input[type=number],select{font:inherit;font-size:1rem;color:var(--ink);background:#fff;border:2px solid var(--rule);border-radius:8px;padding:7px 10px;min-height:44px;width:100%}
+input[type=number]{font-family:"JetBrains Mono",monospace}
+select{cursor:pointer}
+input:focus,select:focus{border-color:var(--st)}
+.num-row{display:flex;align-items:center;gap:8px}
+.num-row input{max-width:160px}
+.unit{color:var(--ink-soft);font-size:.92rem;white-space:nowrap}
+.chk{display:flex;align-items:center;gap:10px;cursor:pointer;min-height:40px;font-size:1rem}
+.chk input{width:22px;height:22px;accent-color:var(--st);flex:none}
+.seg{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.seg button{font:inherit;font-size:.98rem;color:var(--ink);background:#fff;border:2px solid var(--rule);border-radius:8px;padding:6px 12px;min-height:44px;cursor:pointer;text-align:start}
+.seg button small{color:var(--ink-soft);font-size:.82rem}
+.seg button[aria-pressed="true"]{background:var(--st);border-color:var(--st);color:#fff}
+.seg button[aria-pressed="true"] small{color:#d8efeb}
+
+.row-card{border:1px dashed var(--rule);border-radius:10px;padding:12px 14px;margin-top:10px;background:var(--paper)}
+.row-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.row-head b{font-size:.98rem}
+.link{font:inherit;font-size:.92rem;background:none;border:0;color:var(--bad);text-decoration:underline;cursor:pointer;min-height:40px;padding:0 4px}
+.add-btn{font:inherit;font-weight:700;font-size:.98rem;margin-top:10px;background:#fff;color:var(--st);border:2px dashed var(--st);border-radius:8px;padding:6px 14px;min-height:44px;cursor:pointer}
+.coef-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 14px;margin-top:6px}
+.calc-line{margin:10px 0 0;font-size:.95rem;color:var(--st);font-weight:700}
+.calc-line.bad{color:var(--bad)}
+
+.svc-total{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px;padding:12px 16px;border-radius:10px;background:var(--ink);color:#fff}
+.svc-total b{font-size:1rem}
+.svc-total .num{font-size:1.35rem;color:var(--amber);font-weight:700}
+.svc-total .err-msg{color:#ffb4b4;font-weight:700}
+.tip{margin:12px 0 0;padding:10px 14px;border-radius:10px;font-size:.95rem;background:#eef5fb;border-inline-start:4px solid #2b6cb0}
+.tip.warn{background:#fdf1e6;border-color:#c2410c}
+.tip .btn-s{margin-inline-start:8px}
+.btn-s{font:inherit;font-size:.9rem;font-weight:700;background:var(--st);color:#fff;border:0;border-radius:8px;padding:6px 12px;min-height:40px;cursor:pointer}
+
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px 18px;margin:0 0 18px;padding:12px 14px;background:var(--paper-2);border-radius:10px}
+.meta div{min-width:0}
+.meta dt{font-size:.8rem;color:var(--ink-soft);margin:0}
+.meta dd{margin:0;font-weight:700;overflow-wrap:anywhere}
+.qt{width:100%;border-collapse:collapse;font-size:.98rem}
+.qt td{padding:6px 0;border-bottom:1px solid var(--rule);vertical-align:top;overflow-wrap:anywhere}
+.qt th{overflow-wrap:anywhere}
+.qt tr td[colspan]{white-space:normal;text-align:start}
+.qt td:last-child{text-align:end;padding-inline-start:12px;white-space:nowrap}
+.qt td.l{padding-inline-start:12px}
+.qt .q-title th{text-align:start;background:var(--ink);color:#fff;padding:8px 12px;font-size:1.02rem;border-radius:6px;font-weight:700}
+.qt .q-title th .num{color:var(--amber);font-size:.8rem;margin-inline-end:8px}
+.qt tbody + tbody .q-title th{border-top:14px solid var(--paper)}
+.qt .q-zero td{color:var(--ink-soft)}
+.qt .q-note td{color:var(--ink-soft);font-size:.88rem;border-bottom:0;padding-top:2px}
+.qt .q-sub td{font-weight:800;border-bottom:2px solid var(--ink)}
+.qt .q-net td{font-weight:700}
+.qt .q-total td{font-size:1.3rem;font-weight:800;border-bottom:0;padding-top:12px}
+.qt .q-total td:last-child{color:var(--st)}
+.qt .q-exp td{color:#7a4a00}
+.qt tfoot tr:first-child td{border-top:14px solid var(--paper)}
+.qt .q-err td{color:var(--bad);font-weight:700}
+h3.sum-h{font-size:1.15rem;margin:22px 0 6px}
+.ms td:nth-child(2){text-align:center;font-family:"JetBrains Mono",monospace}
+details.assume{margin-top:18px;background:var(--paper-2);border-radius:10px;padding:10px 14px}
+details.assume summary{cursor:pointer;font-weight:700;min-height:32px}
+details.assume li{font-size:.92rem;margin:4px 0}
+.fine{color:var(--ink-soft);font-size:.88rem;margin:14px 0 0}
+.print-only{display:none}
+
+.nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:24px;flex-wrap:wrap}
+.nav .spacer{flex:1}
+.btn{font:inherit;font-weight:700;font-size:1.05rem;border-radius:8px;padding:8px 22px;min-height:44px;cursor:pointer;border:2px solid var(--ink)}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn.primary:hover:not(:disabled){background:var(--st);border-color:var(--st)}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn.accent{background:var(--st);border-color:var(--st);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.nav-err{color:var(--bad);font-weight:700;font-size:.95rem;margin:0}
+
+.bar{position:fixed;inset-inline:0;bottom:0;height:var(--bar-h);background:var(--panel);border-top:1px solid rgba(255,181,71,.35);z-index:10}
+.bar-in{max-width:900px;height:100%;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bar .lbl{color:#c9d3de;font-size:.95rem;line-height:1.3;min-width:0}
+.bar .lbl small{display:block;color:#8a9bb0;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .tot{font-family:"JetBrains Mono",monospace;font-size:1.6rem;font-weight:700;color:var(--amber);direction:ltr;unicode-bidi:isolate;white-space:nowrap}
+.bar .empty{color:var(--sky);font-weight:600;text-align:end}
+
+noscript p{background:var(--paper);color:var(--ink);padding:16px;border-radius:10px}
+
+@media (max-width:640px){
+  body{font-size:1.06rem}
+  .wrap{padding:28px 16px 16px}
+  .card{padding:20px 14px 18px;border-inline-start-width:6px}
+  .card h2{font-size:1.55rem}
+  .group{padding:14px 12px}
+  .stepper li{flex:0 0 auto}
+  .stepper li:has([aria-current="step"]){flex:1 1 auto}
+  .stepper button{padding:6px}
+  .stepper button:not([aria-current="step"]) .t{display:none}
+  .bar-in{padding:0 16px}
+  .bar .tot{font-size:1.3rem}
+  .qt{font-size:.92rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+@media print{
+  @page{margin:14mm}
+  body{background:#fff;color:#000;padding:0;font-size:11pt}
+  .skip,header,.stepper,.nav,.bar,.no-print{display:none !important}
+  .wrap{padding:0;max-width:none}
+  .card{box-shadow:none;border:0;padding:0;background:#fff}
+  .print-only{display:block}
+  .q-head{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:14px}
+  .qt .q-title th{background:#eee;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .qt .q-title th .num{color:#000}
+  .qt tbody + tbody .q-title th,.qt tfoot tr:first-child td{border-top-color:#fff}
+  .meta,details.assume{background:#f3f3f3;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  details.assume > *{display:block}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#stage">דילוג לתוכן הראשי</a>
+<div class="wrap">
+  <header>
+    <div class="kicker" dir="ltr">SURVEY FEE CALCULATOR</div>
+    <h1>מחשבון תעריף<span>מדידות ומיפוי</span></h1>
+    <p class="sub" id="sub"></p>
+  </header>
+  <nav aria-label="שלבי החישוב"><ol class="stepper" id="stepper"></ol></nav>
+  <main class="card" id="stage" tabindex="-1">
+    <noscript><p>המחשבון צריך JavaScript. פתחו את הקובץ בדפדפן רגיל (Chrome, Edge או Firefox).</p></noscript>
+  </main>
+</div>
+<div class="bar" id="bar" role="status" aria-live="polite" aria-atomic="true"><div class="bar-in" id="bar-in"></div></div>
+
+<script>
+(function(){
+"use strict";
+var P = PRICES;
+var ORDER = ["photo", "ground", "trees", "blue", "comp", "inputs"];
+var SHORT = { photo: "פוטוגרמטריה", ground: "מיפוי קרקעי", trees: "סקר עצים", blue: "קו כחול ותת״ג", comp: "קומפילציה", inputs: "תשומות" };
+var DESC = {
+  photo:  "מיפוי מטיסת צילום, לפי ק״מ ברצועה וקנה מידה. כולל טיסה, נקודות בקרה, אורתופוטו ורקע גושים וחלקות.",
+  ground: "מיפוי קרקעי: רשת בקרה, סימון ואיזון מסילה, מפלגים, ומדידה מלאה ב-1:250 או 1:500.",
+  trees:  "מפת מדידה, טבלת Excel וסימון עצים בשטח, לפי מספר עצים.",
+  blue:   "מפת גבול לקו כחול אנליטי ואישור תת״ג במפ״י, לפי גושים וחלקות.",
+  comp:   "קומפילציה סטטוטורית, לפי שטח בדונם ומספר תכניות.",
+  inputs: "ימי עבודה ושעות: להשלמות שדה ולעבודות שלא כלולות בטבלאות."
+};
+var UNIT = { photo: "לפי ק״מ / דונם", ground: "לפי ק״מ", trees: "לפי עץ", blue: "לפי גוש וחלקה", comp: "לפי דונם ותכנית", inputs: "לפי יום / שעה" };
+
+/* ---------- helpers ---------- */
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function fmt(n){ n = Math.round(n); return (n < 0 ? "−" : "") + "₪ " + Math.abs(n).toLocaleString("he-IL"); }
+function money(n){ return '<span class="num">' + fmt(n) + "</span>"; }
+function qn(n){ return (+n).toLocaleString("he-IL", { maximumFractionDigits: 3 }); }
+function pct(f){ return Math.round(f * 1000) / 10 + "%"; }
+function num(v){ var n = parseFloat(String(v == null ? "" : v).replace(/,/g, "")); return isFinite(n) && n > 0 ? n : 0; }
+function int(v){ return Math.floor(num(v)); }
+function getP(path){ return path.split(".").reduce(function(o, k){ return o == null ? o : o[k]; }, state); }
+function setP(path, v){ var ks = path.split("."), last = ks.pop(); var o = ks.reduce(function(o, k){ return o[k]; }, state); o[last] = v; }
+function fid(path){ return "f-" + path.replace(/\./g, "-"); }
+
+/* ---------- state ---------- */
+function newRow(list){
+  if (list === "photo.rows") return { rate: "0", km: "", dunams: "" };
+  if (list === "blue.rows") return { count: "1", cls: "full", field: true, office: true, parcels: "" };
+  return { pct: "", c: {} };            // קטע עם מקדמי מורכבות
+}
+var state = {
+  step: 0, maxStep: 0, services: [],
+  photo: { rows: [newRow("photo.rows")], type: 0, builtPct: "", hillyPct: "", flights: "1", zone: "0", greenLine: false },
+  ground: { controlKm: "", trackKm: "", tracks: "1", turnouts: "", surveys: {}, update: false, segs: [] },
+  trees: { counts: {}, segs: [] },
+  blue: { withTatag: true, rows: [newRow("blue.rows")], review: "none", reviewAmount: "" },
+  comp: { dunams: "", plans: "" },
+  inputs: { qty: {} },
+  cpiBase: "", cpiNow: "", project: "", client: "", preparedBy: ""
+};
+P.ground.surveys.forEach(function(s){ state.ground.surveys[s.id] = { km: "", dunams: "" }; });
+
+/* photogrammetry rate options, including 1:1,000 priced as 1:1,250 */
+var PHOTO_OPTS = P.photo.rates.map(function(r){
+  return { label: "קנ״מ " + r.scale + " · רצועה של " + r.strip + " מ׳", scale: r.scale, priceScale: r.scale, perKm: r.perKm };
+});
+P.photo.rates.forEach(function(r){
+  if (r.scale === P.photo.scale1000PricedAs)
+    PHOTO_OPTS.push({ label: "קנ״מ 1:1,000 · רצועה של " + r.strip + " מ׳ (במחיר 1:1,250)", scale: "1:1,000", priceScale: r.scale, perKm: r.perKm });
+});
+
+/* ---------- pricing per section ---------- */
+function L(label, amount, extra){ var o = { label: label, amount: Math.round(amount) }; if (extra) for (var k in extra) o[k] = extra[k]; return o; }
+function sumLines(lines){ return lines.reduce(function(a, l){ return a + (l.amount || 0); }, 0); }
+
+function segFactor(segs, coeffs){
+  var used = 0, f = 0, parts = [];
+  segs.forEach(function(sg, i){
+    var p = num(sg.pct) / 100, m = 1, names = [];
+    coeffs.forEach(function(c, j){ if (sg.c[j]){ m *= c.factor; names.push(c.label + " ×" + c.factor); } });
+    used += p; f += p * m;
+    if (p) parts.push("קטע " + (i + 1) + ": " + qn(p * 100) + "% " + (names.length ? "(" + names.join(", ") + ")" : "(בלי מקדם)"));
+  });
+  if (used > 1.000001) return { error: "סכום האחוזים בקטעי המקדמים עולה על 100%." };
+  return { factor: f + (1 - used), used: used, parts: parts };
+}
+
+var CALC = {
+  photo: function(){
+    var C = P.photo, s = state.photo, lines = [], notes = [], km = 0;
+    s.rows.forEach(function(r){
+      var o = PHOTO_OPTS[+r.rate] || PHOTO_OPTS[0], k = num(r.km), d = num(r.dunams);
+      if (k){ lines.push(L(o.label + ": " + qn(k) + " ק״מ × " + fmt(o.perKm), k * o.perKm)); km += k; }
+      if (d){ var dr = C.extraPerDunam[o.priceScale]; lines.push(L("דונמים מעבר לרצועה (קנ״מ " + o.scale + "): " + qn(d) + " × " + fmt(dr), d * dr)); }
+    });
+    var base = sumLines(lines);
+    if (!base) return { empty: true, lines: [], subtotal: 0 };
+    var b = num(s.builtPct) / 100, h = num(s.hillyPct) / 100;
+    if (b + h > 1.000001) return { error: "שטח בנוי + שטח הררי עולים על 100%. לפי התעריף לא חל יותר ממקדם אחד על אותו תא שטח." };
+    var cf = 1 + b * (C.complexity.built.factor - 1) + h * (C.complexity.hilly.factor - 1);
+    var running = base;
+    if (cf !== 1){
+      var cl = L("מקדם מורכבות משוקלל ×" + cf.toFixed(4).replace(/0+$/, "") + " (" + [b ? qn(b * 100) + "% בנוי" : "", h ? qn(h * 100) + "% הררי" : ""].filter(Boolean).join(", ") + ")", running * (cf - 1));
+      lines.push(cl); running += cl.amount;
+    }
+    var t = C.mappingTypes[+s.type] || C.mappingTypes[0];
+    if (t.pct !== 1){ var tl = L(t.label + ": " + pct(t.pct) + " ממיפוי מלא", running * (t.pct - 1)); lines.push(tl); running += tl.amount; }
+    if (!t.noMinimum){
+      var min = km > 0 ? C.minimumTask : C.minimumDunamsOnly;
+      if (running < min){
+        lines.push(L((km > 0 ? "השלמה למחיר מינימום למטלה למיפוי פוטוגרמטרי (" : "השלמה למינימום להזמנת עבודה לפי דונמים בלבד (") + fmt(min) + ")", min - running));
+        running = min;
+      }
+    }
+    var fl = Math.max(1, int(s.flights)), z = C.flightZones[+s.zone] || C.flightZones[0];
+    if (z.perFlight) lines.push(L("תוספת טיסה: " + z.label + " · " + fl + " × " + fmt(z.perFlight), fl * z.perFlight));
+    if (s.greenLine) lines.push(L("תוספת למיפוי מעבר לקו הירוק · " + fl + " × " + fmt(C.greenLinePerFlight), fl * C.greenLinePerFlight));
+    notes.push("המחיר לא כולל השלמות שדה. הן משולמות לפי ימי עבודה (סעיף 3.7).");
+    return { lines: lines, subtotal: sumLines(lines), notes: notes };
+  },
+
+  ground: function(){
+    var C = P.ground, s = state.ground, lines = [];
+    var ck = num(s.controlKm);
+    if (ck) lines.push(L("הקמת רשת בקרה: " + qn(ck) + " ק״מ תוואי × " + fmt(C.controlPerKm), ck * C.controlPerKm));
+    var tk = num(s.trackKm), tr = Math.max(1, int(s.tracks));
+    if (tk){
+      var mult = 1 + C.extraTrackPct * (tr - 1);
+      lines.push(L("סימון ואיזון תוואי מסילה קיימת: " + qn(tk) + " ק״מ × " + fmt(C.trackMarkPerKm) + (tr > 1 ? " · " + tr + " מסילות (+" + pct(C.extraTrackPct) + " לכל מסילה נוספת)" : ""), tk * C.trackMarkPerKm * mult));
+    }
+    var tu = int(s.turnouts);
+    if (tu) lines.push(L("מפלגים: " + tu + " × " + fmt(C.perTurnout), tu * C.perTurnout));
+    var sv = [];
+    C.surveys.forEach(function(x){
+      var v = s.surveys[x.id], k = num(v.km), d = x.extraPerDunam ? num(v.dunams) : 0;
+      if (k) sv.push(L("מדידה קרקעית מלאה " + x.scale + ", " + x.label + ": " + qn(k) + " ק״מ × " + fmt(x.perKm), k * x.perKm));
+      if (d) sv.push(L("דונמים מעבר לרצועת 120 מ׳ (" + x.scale + ", מסילה קיימת): " + qn(d) + " × " + fmt(x.extraPerDunam), d * x.extraPerDunam));
+    });
+    var svBase = sumLines(sv);
+    lines = lines.concat(sv);
+    if (svBase){
+      var sf = segFactor(s.segs, C.complexity);
+      if (sf.error) return { error: sf.error };
+      var run = svBase;
+      if (Math.abs(sf.factor - 1) > 1e-9){ var c = L("מקדמי מורכבות על המדידה הקרקעית המלאה ×" + sf.factor.toFixed(4).replace(/\.?0+$/, ""), svBase * (sf.factor - 1), { sub: sf.parts.join(" · ") }); lines.push(c); run += c.amount; }
+      if (s.update) lines.push(L("עדכון מיפוי קרקעי: " + pct(C.updatePct) + " ממיפוי מלא", run * (C.updatePct - 1)));
+    }
+    if (!lines.length) return { empty: true, lines: [], subtotal: 0 };
+    return { lines: lines, subtotal: sumLines(lines) };
+  },
+
+  trees: function(){
+    var C = P.trees, s = state.trees, lines = [];
+    C.items.forEach(function(x){
+      var n = int(s.counts[x.id]);
+      if (n) lines.push(L(x.stage + ": " + x.label + " · " + n + " עצים × " + fmt(x.perTree), n * x.perTree));
+    });
+    var base = sumLines(lines);
+    if (!base) return { empty: true, lines: [], subtotal: 0 };
+    var sf = segFactor(s.segs, C.complexity);
+    if (sf.error) return { error: sf.error };
+    var run = base;
+    if (Math.abs(sf.factor - 1) > 1e-9){ var c = L("מקדמי מורכבות ×" + sf.factor.toFixed(4).replace(/\.?0+$/, ""), base * (sf.factor - 1), { sub: sf.parts.join(" · ") }); lines.push(c); run += c.amount; }
+    if (run < C.minimum){ lines.push(L("השלמה למחיר מינימום למדידה לסקר עצים (" + fmt(C.minimum) + ")", C.minimum - run)); }
+    return { lines: lines, subtotal: sumLines(lines) };
+  },
+
+  blue: function(){
+    var C = P.blue, s = state.blue, lines = [], expenses = [];
+    function cls(id){ for (var i = 0; i < C.classes.length; i++) if (C.classes[i].id === id) return C.classes[i]; return C.classes[0]; }
+    function rate(f){ return f === 1 ? "" : f === 0 ? "" : " · " + pct(f) + " מהמחירון (3.5.1)"; }
+    s.rows.forEach(function(r, i){
+      var n = int(r.count), k = cls(r.cls), p = int(r.parcels), pre = "קבוצה " + (i + 1) + " (" + n + " גושים, סיווג " + k.label + "): ";
+      if (!n && !p) return;
+      if (r.field){
+        if (k.field === 0) lines.push(L(pre + "עבודת שדה: אין עבודת שדה, לא משולם", 0, { zero: true }));
+        else lines.push(L(pre + "מפת גבול, עבודת שדה: " + n + " × " + fmt(C.fieldPerGush) + rate(k.field), n * C.fieldPerGush * k.field));
+      }
+      if (r.office) lines.push(L(pre + "מפת גבול, עבודת משרד: " + n + " × " + fmt(C.officePerGush) + rate(k.office), n * C.officePerGush * k.office));
+      if (p) lines.push(L(pre + "תוספת חלקות מעל חלקה ראשונה: " + p + " × " + fmt(C.perExtraParcel) + rate(k.parcel), p * C.perExtraParcel * k.parcel));
+      if (s.withTatag){
+        if (k.tatag === 0) lines.push(L(pre + "אישור תת״ג במפ״י: אין צורך בתת״ג", 0, { zero: true }));
+        else lines.push(L(pre + "אישור תת״ג במפ״י: " + n + " × " + fmt(C.tatagPerGush), n * C.tatagPerGush));
+      }
+    });
+    if (s.withTatag){
+      var a = num(s.reviewAmount);
+      if (a && s.review === "mapi") expenses.push(L("ביקורת מפ״י ואגרות מפ״י (לפי תעריף מפ״י, החזר לפי קבלות)", a));
+      if (a && s.review === "reviewer") expenses.push(L("מודד מבקר: " + fmt(a) + " לפי טבלה 24, בהנחה של " + pct(C.reviewerDiscount), a * (1 - C.reviewerDiscount)));
+    }
+    if (!lines.length && !expenses.length) return { empty: true, lines: [], subtotal: 0 };
+    return { lines: lines, subtotal: sumLines(lines), expenses: expenses,
+      milestones: s.withTatag ? C.milestones.withTatag : C.milestones.withoutTatag,
+      notes: [s.withTatag ? "פרויקט קו כחול ותת״ג: סעיפים 1-4 בטבלה. סיום הפרויקט = אישור התת״ג במפ״י." : "קו כחול אנליטי בלי תת״ג: סעיפים 1-3 בלבד."] };
+  },
+
+  comp: function(){
+    var C = P.comp, s = state.comp, lines = [];
+    function grad(q, brackets, unit){
+      var prev = 0, out = [];
+      for (var i = 0; i < brackets.length; i++){
+        var cap = brackets[i].upTo == null ? Infinity : brackets[i].upTo, part = Math.max(0, Math.min(q, cap) - prev);
+        if (part > 0) out.push({ part: part, rate: brackets[i].rate, from: prev, to: Math.min(q, cap) });
+        prev = cap; if (q <= cap) break;
+      }
+      return out;
+    }
+    var d = num(s.dunams), pl = int(s.plans);
+    var area = grad(d, C.areaBrackets);
+    var areaSum = 0;
+    area.forEach(function(g){ var l = L("שטח: " + qn(g.part) + " דונם × " + fmt(g.rate) + " (מדרגה " + qn(g.from) + "-" + qn(g.to) + ")", g.part * g.rate); lines.push(l); areaSum += l.amount; });
+    if (areaSum > C.areaMax) lines.push(L("תקרה: תעריף מקסימלי לשטח קומפילציה " + fmt(C.areaMax), C.areaMax - areaSum));
+    grad(pl, C.planBrackets).forEach(function(g){ lines.push(L("תכניות: " + g.part + " × " + fmt(g.rate) + " (תכניות " + (g.from + 1) + "-" + g.to + ")", g.part * g.rate)); });
+    if (!lines.length) return { empty: true, lines: [], subtotal: 0 };
+    var run = sumLines(lines);
+    if (run < C.minimum) lines.push(L("השלמה למחיר מינימום לקומפילציה (" + fmt(C.minimum) + ")", C.minimum - run));
+    return { lines: lines, subtotal: sumLines(lines) };
+  },
+
+  inputs: function(){
+    var lines = [];
+    P.inputs.items.forEach(function(x){
+      var q = num(state.inputs.qty[x.id]);
+      if (q) lines.push(L(x.label + ": " + qn(q) + " " + x.unit + " × " + fmt(x.rate), q * x.rate));
+    });
+    if (!lines.length) return { empty: true, lines: [], subtotal: 0 };
+    return { lines: lines, subtotal: sumLines(lines) };
+  }
+};
+
+function cpiFactor(){ var b = num(state.cpiBase), n = num(state.cpiNow); return b && n ? n / b : 1; }
+
+function calcAll(){
+  var r = { services: [], fees: 0, expenses: 0, errors: [], empties: [] };
+  if (!state.services.length){ r.errors.push("בחרו לפחות שירות אחד"); return r; }
+  ORDER.forEach(function(id){
+    if (state.services.indexOf(id) < 0) return;
+    var x = CALC[id](); x.id = id; x.title = P[id].title; x.section = P[id].section;
+    r.services.push(x);
+    if (x.error) r.errors.push("סעיף " + x.section + ": " + x.error);
+    else if (x.empty) r.empties.push(id);
+    else { r.fees += x.subtotal; (x.expenses || []).forEach(function(e){ r.expenses += e.amount; }); }
+  });
+  r.factor = cpiFactor();
+  r.linkage = Math.round(r.fees * (r.factor - 1));
+  r.net = r.fees + r.linkage;
+  r.vat = Math.round(r.net * P.vatRate);
+  r.total = r.net + r.vat;
+  r.expVat = P.vatOnExpenses ? Math.round(r.expenses * P.vatRate) : 0;
+  r.grand = r.total + r.expenses + r.expVat;
+  return r;
+}
+window.surveyQuote = { state: state, calc: calcAll, CALC: CALC };   // לבדיקות
+
+/* ---------- steps ---------- */
+function steps(){
+  var s = [{ id: "services", label: "שירותים" }];
+  ORDER.forEach(function(id){ if (state.services.indexOf(id) > -1) s.push({ id: id, label: SHORT[id] }); });
+  s.push({ id: "cpi", label: "הצמדה ופרטים" }, { id: "summary", label: "סיכום" });
+  return s;
+}
+function stepError(i){
+  var st = steps()[i];
+  if (!st) return "";
+  if (st.id === "services") return state.services.length ? "" : "בחרו לפחות שירות אחד כדי להמשיך.";
+  if (CALC[st.id]){ var x = CALC[st.id](); return x.error || ""; }
+  return "";
+}
+function canEnter(n){ for (var i = 0; i < n; i++) if (stepError(i)) return false; return n < steps().length; }
+function go(n){
+  if (n < 0 || !canEnter(n)) return;
+  state.step = n; state.maxStep = Math.max(state.maxStep, n);
+  render(true);
+}
+
+/* ---------- field builders ---------- */
+function numField(path, label, unit, opts){
+  opts = opts || {};
+  return '<div class="field' + (opts.full ? " full" : "") + '"><label for="' + fid(path) + '">' + label + (opts.price ? ' <span class="price-tag">' + opts.price + "</span>" : "") + "</label>" +
+    '<div class="num-row"><input type="number" inputmode="decimal" min="0" step="' + (opts.step || "any") + '" id="' + fid(path) + '" data-path="' + path + '" data-key="' + path + '" value="' + esc(getP(path)) + '">' +
+    (unit ? '<span class="unit">' + unit + "</span>" : "") + "</div>" + (opts.hint ? '<p class="hint">' + opts.hint + "</p>" : "") + "</div>";
+}
+function textField(path, label){
+  return '<div class="field"><label for="' + fid(path) + '">' + label + ' <span class="price-tag">(לא חובה)</span></label><input type="text" id="' + fid(path) + '" data-path="' + path + '" data-key="' + path + '" value="' + esc(getP(path)) + '"></div>';
+}
+function selectField(path, label, options, opts){
+  opts = opts || {};
+  var v = String(getP(path)), h = '<div class="field' + (opts.full ? " full" : "") + '"><label for="' + fid(path) + '">' + label + '</label><select id="' + fid(path) + '" data-path="' + path + '" data-key="' + path + '"' + (opts.rerender ? " data-rerender" : "") + ">";
+  options.forEach(function(o){ h += '<option value="' + esc(o.value) + '"' + (String(o.value) === v ? " selected" : "") + ">" + esc(o.label) + "</option>"; });
+  return h + "</select>" + (opts.hint ? '<p class="hint">' + opts.hint + "</p>" : "") + "</div>";
+}
+function check(path, label, opts){
+  opts = opts || {};
+  return '<label class="chk"><input type="checkbox" data-path="' + path + '" data-key="' + path + '"' + (getP(path) ? " checked" : "") + (opts.rerender ? " data-rerender" : "") + "> <span>" + label + "</span></label>";
+}
+function segButtons(path, options){
+  var v = JSON.stringify(getP(path)), h = '<div class="seg">';
+  options.forEach(function(o, i){
+    var val = JSON.stringify(o.value);
+    h += '<button type="button" data-action="set" data-path="' + path + '" data-value=\'' + esc(val) + '\' data-key="' + path + "-" + i + '" aria-pressed="' + (val === v) + '">' + o.label + "</button>";
+  });
+  return h + "</div>";
+}
+function group(title, hint, body){
+  return '<section class="group"><h3>' + title + "</h3>" + (hint ? '<p class="hint">' + hint + "</p>" : "") + body + "</section>";
+}
+function segEditor(key, hint){
+  var C = P[key].complexity, segs = state[key].segs, h = "";
+  segs.forEach(function(sg, i){
+    h += '<div class="row-card"><div class="row-head"><b>קטע ' + (i + 1) + "</b>" +
+      '<button type="button" class="link" data-action="del" data-list="' + key + '.segs" data-i="' + i + '" data-key="del-' + key + "-" + i + '">הסרת הקטע</button></div>' +
+      '<div class="fields">' + numField(key + ".segs." + i + ".pct", "אחוז מהשטח / מהתוואי", "%") + "</div>" +
+      '<div class="coef-grid">' + C.map(function(c, j){ return check(key + ".segs." + i + ".c." + j, esc(c.label) + ' <span class="num">×' + c.factor + "</span>"); }).join("") + "</div></div>";
+  });
+  h += '<button type="button" class="add-btn" data-action="add" data-list="' + key + '.segs" data-key="add-' + key + '-seg">+ הוספת קטע עם מקדם</button>' +
+    '<p class="calc-line" id="seg-line-' + key + '"></p>';
+  return group("מקדמי מורכבות", hint, h);
+}
+function svcTotalBox(){ return '<div class="svc-total" id="svc-total"></div>'; }
+function head(id){
+  return '<div class="tag" dir="ltr">SECTION ' + P[id].section + '</div><h2 tabindex="-1">' + esc(P[id].title) + "</h2>";
+}
+
+/* ---------- views ---------- */
+var VIEWS = {
+  services: function(){
+    var h = '<div class="tag" dir="ltr">STEP 1</div><h2 tabindex="-1">אילו שירותים נכללים בהצעה?</h2>' +
+      '<p class="lede">אלה ששת הסעיפים של פרק 3 בתעריף. אפשר לבחור כמה יחד. לכל סעיף שנבחר יהיה שלב משלו עם השאלות שלו.</p><div class="svc-grid">';
+    ORDER.forEach(function(id){
+      var on = state.services.indexOf(id) > -1;
+      h += '<button type="button" class="pick" data-action="svc" data-id="' + id + '" data-key="svc-' + id + '" aria-pressed="' + on + '">' +
+        '<span class="box" aria-hidden="true"></span><span class="sec">סעיף ' + P[id].section + "</span><b>" + esc(P[id].title) + "</b>" +
+        '<span class="hint">' + DESC[id] + '</span><span class="unit-line">' + UNIT[id] + "</span></button>";
+    });
+    return h + "</div>";
+  },
+
+  photo: function(){
+    var C = P.photo, s = state.photo, rows = "";
+    var opts = PHOTO_OPTS.map(function(o, i){ return { value: String(i), label: o.label + " · " + fmt(o.perKm) + " לק״מ" }; });
+    s.rows.forEach(function(r, i){
+      rows += '<div class="row-card"><div class="row-head"><b>מקטע ' + (i + 1) + "</b>" +
+        (s.rows.length > 1 ? '<button type="button" class="link" data-action="del" data-list="photo.rows" data-i="' + i + '" data-key="del-photo-' + i + '">הסרה</button>' : "") + "</div>" +
+        '<div class="fields">' + selectField("photo.rows." + i + ".rate", "קנה מידה ורוחב רצועה", opts, { full: true }) +
+        numField("photo.rows." + i + ".km", "אורך", "ק״מ") +
+        numField("photo.rows." + i + ".dunams", "דונמים החורגים מהרצועה", "דונם", { hint: "תוספת לדונם לפי קנ״מ: 1:250 ₪40 · 1:500 ₪18 · 1:1,250 ₪12 · 1:2,500 ₪6" }) +
+        "</div></div>";
+    });
+    rows += '<button type="button" class="add-btn" data-action="add" data-list="photo.rows" data-key="add-photo">+ הוספת מקטע</button>';
+    var h = head("photo") + '<p class="lede">חישוב לפי ק״מ ברצועה. מקטע לכל קנה מידה. אם יש רק דונמים בלי ק״מ, המחשבון מחשב לפי דונמים בלבד.</p>' +
+      group("מקטעי מיפוי", "מחיר מינימום למטלה למיפוי פוטוגרמטרי: " + fmt(C.minimumTask) + ". לפי דונמים בלבד: מינימום " + fmt(C.minimumDunamsOnly) + " להזמנת עבודה.", rows) +
+      group("סוג המיפוי", "", segButtons("photo.type", C.mappingTypes.map(function(t, i){ return { value: i, label: esc(t.label) + " <small>" + (t.pct === 1 ? "100%" : pct(t.pct) + " ממיפוי מלא") + "</small>" }; }))) +
+      group("מקדמי מורכבות", "המקדמים חלים על החלק היחסי של שטח המיפוי. לא יותר ממקדם אחד על אותו תא שטח. דרכים, מבני דרך, תשתיות, מתקנים ומבנים בודדים לא נחשבים שטח בנוי.",
+        '<div class="fields">' + numField("photo.builtPct", esc(C.complexity.built.label), "% מהשטח", { price: "×" + C.complexity.built.factor }) +
+        numField("photo.hillyPct", esc(C.complexity.hilly.label), "% מהשטח", { price: "×" + C.complexity.hilly.factor }) + "</div>") +
+      group("תוספות לטיסה (בלי מקדמי מורכבות)", "רוב טיסות הצילום יוצאות משדה התעופה בחיפה. אם הטיסה יוצאת משדה אחר, בחרו לפי המרחק מהשדה שממנו יצאה בפועל.",
+        '<div class="fields">' + numField("photo.flights", "מספר טיסות", "טיסות", { step: "1" }) +
+        selectField("photo.zone", "אזור המיפוי", C.flightZones.map(function(z, i){ return { value: String(i), label: z.label + (z.perFlight ? " · " + fmt(z.perFlight) + " לטיסה" : "") }; })) + "</div>" +
+        check("photo.greenLine", "מיפוי מעבר לקו הירוק <span class=\"price-tag\">" + fmt(C.greenLinePerFlight) + " לטיסה</span>")) +
+      addInputsTip("המחיר לא כולל השלמות שדה. הן משולמות לפי ימי עבודה, בסעיף 3.7.") + svcTotalBox();
+    return h;
+  },
+
+  ground: function(){
+    var C = P.ground, sv = "";
+    ["1:250", "1:500"].forEach(function(sc){
+      sv += '<div class="row-card"><div class="row-head"><b>קנ״מ ' + sc + "</b></div><div class=\"fields\">";
+      C.surveys.forEach(function(x){
+        if (x.scale !== sc) return;
+        sv += numField("ground.surveys." + x.id + ".km", esc(x.label), "ק״מ", { price: fmt(x.perKm) + " לק״מ", full: !x.extraPerDunam });
+        if (x.extraPerDunam) sv += numField("ground.surveys." + x.id + ".dunams", "דונמים החורגים מרצועת 120 מ׳ (מסילה קיימת)", "דונם", { price: fmt(x.extraPerDunam) + " לדונם" });
+      });
+      sv += "</div></div>";
+    });
+    return head("ground") + '<p class="lede">תמורה לפי קילומטר מדידה. מחיר הק״מ כולל הקמה וחישוב של רשת בקרה אופקית ואנכית.</p>' +
+      group("הקמת רשת בקרה", "ללא מגבלה על מספר הנקודות לק״מ.", '<div class="fields">' + numField("ground.controlKm", "רשת בקרה", "ק״מ תוואי", { price: fmt(C.controlPerKm) + " לק״מ" }) + "</div>") +
+      group("הכנת מפת רקע לתכנון", "השלמת המיפוי הפוטוגרמטרי לתוואי.",
+        '<div class="fields">' + numField("ground.trackKm", "סימון ואיזון תוואי מסילה קיימת", "ק״מ מסילה", { price: fmt(C.trackMarkPerKm) + " לק״מ" }) +
+        numField("ground.tracks", "מספר מסילות", "מסילות", { step: "1", hint: "כל מסילה נוספת: +" + pct(C.extraTrackPct) }) +
+        numField("ground.turnouts", "מפלגים (לכל סוגי המפלגים)", "מפלגים", { step: "1", price: fmt(C.perTurnout) + " למפלג" }) + "</div>") +
+      group("מדידה קרקעית מלאה", "רצועה של 120 מ׳. מקדמי המורכבות למטה חלים על הסעיף הזה.", sv +
+        '<div style="margin-top:10px">' + check("ground.update", "מטלה לעדכון מיפוי קרקעי: " + pct(C.updatePct) + " ממיפוי מלא") + "</div>") +
+      segEditor("ground", "מקדמי המורכבות חלים על המדידה הקרקעית המלאה (סעיפים 3-4 בטבלת מחירי הבסיס). כל מקדם מוכפל בחלק היחסי של התוואי שהוא חל עליו. אם כמה מקדמים חלים על אותו קטע, הם מוכפלים זה בזה. שאר התוואי בלי מקדם.") +
+      svcTotalBox();
+  },
+
+  trees: function(){
+    var C = P.trees, f = "";
+    C.items.forEach(function(x){ f += numField("trees.counts." + x.id, x.stage + ": " + esc(x.label), "עצים", { step: "1", price: fmt(x.perTree) + " לעץ", full: true }); });
+    return head("trees") + '<p class="lede">התוצרים לפי הנוהל ״כללים להכנת סקר עצים״ של משרד החקלאות, כולל תצלום של כל עץ או פוליגון עם תווית הסימון.</p>' +
+      group("כמויות", "לא משולם על מדידה וסימון חוזרים בטווח של 5 שנים ממועד סימון העץ המקורי. מחיר מינימום: " + fmt(C.minimum) + ".", '<div class="fields">' + f + "</div>") +
+      segEditor("trees", "כל מקדם מוכפל בחלק היחסי של שטח הסקר שהוא חל עליו. אם כמה מקדמים חלים על אותו קטע, הם מוכפלים זה בזה.") +
+      svcTotalBox();
+  },
+
+  blue: function(){
+    var C = P.blue, s = state.blue, rows = "";
+    var clsOpts = C.classes.map(function(k){ return { value: k.id, label: k.label }; });
+    s.rows.forEach(function(r, i){
+      var b = "blue.rows." + i;
+      rows += '<div class="row-card"><div class="row-head"><b>קבוצת גושים ' + (i + 1) + "</b>" +
+        (s.rows.length > 1 ? '<button type="button" class="link" data-action="del" data-list="blue.rows" data-i="' + i + '" data-key="del-blue-' + i + '">הסרה</button>' : "") + "</div>" +
+        '<div class="fields">' + numField(b + ".count", "מספר גושים", "גושים", { step: "1" }) +
+        selectField(b + ".cls", "חומר ביסוס (סעיף 3.5.1)", clsOpts, { full: true }) +
+        numField(b + ".parcels", "חלקות נוספות, מעל החלקה הראשונה", "חלקות", { step: "1", price: fmt(C.perExtraParcel) + " לחלקה" }) + "</div>" +
+        '<div class="coef-grid">' + check(b + ".field", "דורש עבודת שדה <span class=\"price-tag\">" + fmt(C.fieldPerGush) + " לגוש</span>") +
+        check(b + ".office", "דורש עבודת משרד <span class=\"price-tag\">" + fmt(C.officePerGush) + " לגוש</span>") + "</div></div>";
+    });
+    rows += '<button type="button" class="add-btn" data-action="add" data-list="blue.rows" data-key="add-blue">+ הוספת קבוצת גושים (סיווג אחר)</button>';
+    var h = head("blue") + '<p class="lede">לפני הגשת ניתוח שכר, המודד בודק אם יש קדסטר מבוסס על רשת תקפה. גושים כאלה מקבלים שכר מופחת לפי סעיף 3.5.1.</p>' +
+      group("סוג הפרויקט", "", segButtons("blue.withTatag", [
+        { value: true, label: "קו כחול + תת״ג <small>סעיפים 1-4</small>" },
+        { value: false, label: "קו כחול אנליטי בלי תת״ג <small>סעיפים 1-3</small>" }])) +
+      group("גושים וחלקות", "קבוצה לכל סיווג חומר ביסוס. סיווג 1: אין עבודת שדה, משרד וחלקות ב-50%, אין צורך בתת״ג. סיווג 2.1: הנחה של 15% ואין צורך בתת״ג. 2.2 ו-3: לפי מחירון.", rows);
+    if (s.withTatag){
+      h += group("ביקורת התת״ג (הוצאות להחזר)", "התעריף של אישור תת״ג (" + fmt(C.tatagPerGush) + " לגוש) לא כולל את עלות הביקורת. הביקורת על ידי מפ״י, ומודד מבקר רק באישור מראש של הרכבת. תעריף מפ״י וטבלה 24 לא נמצאים בקובץ, לכן מזינים סכום צפוי.",
+        segButtons("blue.review", [{ value: "none", label: "לא לכלול" }, { value: "mapi", label: "ביקורת מפ״י <small>לפי תעריף מפ״י</small>" }, { value: "reviewer", label: "מודד מבקר <small>טבלה 24, בהנחה של 10%</small>" }]) +
+        (s.review !== "none" ? '<div class="fields">' + numField("blue.reviewAmount", s.review === "mapi" ? "סכום צפוי לביקורת ולאגרות מפ״י" : "עלות לפי טבלה 24 (לפני ההנחה)", "₪") + "</div>" : ""));
+    }
+    return h + svcTotalBox();
+  },
+
+  comp: function(){
+    var C = P.comp;
+    function br(list, unit){ return list.map(function(b, i){ var from = i ? list[i - 1].upTo + 1 : 1; return (b.upTo == null ? "מעל " + list[i - 1].upTo : from + "-" + b.upTo) + ": " + fmt(b.rate); }).join(" · "); }
+    return head("comp") + '<p class="lede">תעריף מדורג: כל מדרגה מחויבת בתעריף שלה. לדוגמה מהתעריף: 750 דונם ו-27 תכניות = ₪ 21,400.</p>' +
+      group("שטח הקומפילציה", "לדונם: " + br(C.areaBrackets) + ". תעריף מקסימלי לשטח: " + fmt(C.areaMax) + ".", '<div class="fields">' + numField("comp.dunams", "שטח", "דונם") + "</div>") +
+      group("כמות תכניות בקומפילציה", "לתכנית: " + br(C.planBrackets) + ".", '<div class="fields">' + numField("comp.plans", "מספר תכניות", "תכניות", { step: "1" }) + "</div>") +
+      '<p class="tip">מחיר מינימום לקומפילציה: ' + money(C.minimum) + ".</p>" + svcTotalBox();
+  },
+
+  inputs: function(){
+    var f = "";
+    P.inputs.items.forEach(function(x){ f += numField("inputs.qty." + x.id, esc(x.label), x.unit, { price: fmt(x.rate) }); });
+    return head("inputs") + '<p class="lede">לתשלום על עבודה שנדרשת להשלמת הסעיפים בטבלאות, או לעבודות מיוחדות.</p>' +
+      group("כמויות", "שעות משרדיות מאושרות על ידי מנהל הפרויקט.", '<div class="fields">' + f + "</div>") + svcTotalBox();
+  },
+
+  cpi: function(){
+    return '<div class="tag" dir="ltr">INDEX &amp; DETAILS</div><h2 tabindex="-1">הצמדה למדד ופרטי ההצעה</h2>' +
+      '<p class="lede">כל המחירים בתעריף צמודים למדד המחירים לצרכן של ' + esc(P.cpiBaseMonth) + '. הזינו את מדד הבסיס ואת המדד העדכני מהלמ״ס (באותו בסיס) כדי לקבל מחיר מעודכן. בלי מדדים, החישוב לפי מחירי התעריף כפי שהם.</p>' +
+      group("הצמדה למדד", "", '<div class="fields">' + numField("cpiBase", "מדד " + esc(P.cpiBaseMonth) + " (בסיס)", "נקודות") + numField("cpiNow", "מדד עדכני", "נקודות") + '</div><p class="calc-line" id="cpi-line"></p>') +
+      group("פרטי ההצעה", "נכנסים להצעה המודפסת.", '<div class="fields">' + textField("project", "שם הפרויקט / המקטע") + textField("client", "מזמין העבודה") + textField("preparedBy", "הוכן על ידי") + "</div>");
+  },
+
+  summary: function(){
+    var r = calcAll(), today = new Date().toLocaleDateString("he-IL");
+    var h = '<div class="print-only q-head"><b>' + esc(state.project || "הצעת מחיר למדידות ומיפוי") + "</b><span>" + today + "</span></div>" +
+      '<div class="tag no-print" dir="ltr">SUMMARY</div><h2 tabindex="-1">ניתוח שכר</h2>' +
+      '<dl class="meta">' + meta("פרויקט", state.project) + meta("מזמין", state.client) + meta("הוכן על ידי", state.preparedBy) + meta("תאריך", today) +
+      meta("הצמדה", r.factor !== 1 ? "מדד " + qn(num(state.cpiNow)) + " / " + qn(num(state.cpiBase)) + " = ×" + r.factor.toFixed(4) : "לפי מחירי התעריף, בלי הצמדה") + "</dl>";
+    if (r.errors.length) h += '<p class="tip warn"><b>יש לתקן:</b> ' + r.errors.map(esc).join(" · ") + "</p>";
+    h += '<table class="qt">';
+    r.services.forEach(function(x){
+      h += '<tbody><tr class="q-title"><th colspan="2" scope="colgroup"><span class="num">' + x.section + "</span>" + esc(x.title) + "</th></tr>";
+      if (x.error) h += '<tr class="q-err"><td class="l" colspan="2">' + esc(x.error) + "</td></tr>";
+      else if (x.empty) h += '<tr class="q-zero"><td class="l" colspan="2">לא הוזנו כמויות לסעיף הזה.</td></tr>';
+      else {
+        x.lines.forEach(function(l){
+          h += '<tr class="' + (l.zero ? "q-zero" : "") + '"><td class="l">' + esc(l.label) + '</td><td>' + (l.zero ? "לא משולם" : money(l.amount)) + "</td></tr>";
+          if (l.sub) h += '<tr class="q-note"><td class="l" colspan="2">' + esc(l.sub) + "</td></tr>";
+        });
+        h += '<tr class="q-sub"><td class="l">סה״כ סעיף ' + x.section + "</td><td>" + money(x.subtotal) + "</td></tr>";
+        (x.notes || []).forEach(function(n){ h += '<tr class="q-note"><td class="l" colspan="2">' + esc(n) + "</td></tr>"; });
+      }
+      h += "</tbody>";
+    });
+    h += "<tfoot><tr><td>סה״כ שכר טרחה לפי התעריף</td><td>" + money(r.fees) + "</td></tr>";
+    if (r.factor !== 1) h += "<tr><td>הצמדה למדד (×" + r.factor.toFixed(4) + ")</td><td>" + money(r.linkage) + "</td></tr>";
+    h += '<tr class="q-net"><td>סה״כ לפני מע״מ</td><td>' + money(r.net) + "</td></tr>" +
+      '<tr><td>מע״מ <span class="num">' + pct(P.vatRate) + "</span></td><td>" + money(r.vat) + "</td></tr>" +
+      '<tr class="q-total"><td>סה״כ שכר טרחה כולל מע״מ</td><td>' + money(r.total) + "</td></tr>";
+    if (r.expenses){
+      r.services.forEach(function(x){ (x.expenses || []).forEach(function(e){ h += '<tr class="q-exp"><td>הוצאות להחזר: ' + esc(e.label) + "</td><td>" + money(e.amount) + "</td></tr>"; }); });
+      if (r.expVat) h += '<tr class="q-exp"><td>מע״מ על ההוצאות</td><td>' + money(r.expVat) + "</td></tr>";
+      h += '<tr class="q-net"><td>סה״כ כולל הוצאות להחזר</td><td>' + money(r.grand) + "</td></tr>";
+    }
+    h += "</tfoot></table>";
+    r.services.forEach(function(x){
+      if (!x.milestones || x.error || x.empty) return;
+      var base = Math.round(x.subtotal * r.factor), cum = 0;
+      h += '<h3 class="sum-h">אבני דרך לתשלום, סעיף 3.5 (לפני מע״מ)</h3><table class="qt ms">';
+      x.milestones.forEach(function(m, i){ cum += m.pct; h += "<tr><td>" + (i + 1) + ". " + esc(m.label) + "</td><td>" + pct(m.pct) + " (מצטבר " + pct(cum) + ")</td><td>" + money(base * m.pct) + "</td></tr>"; });
+      h += "</table>";
+    });
+    h += '<details class="assume"><summary>איך חושב (פרשנות שלי במקומות שהתעריף לא מפרט)</summary><ul>' +
+      "<li>3.2: מקדמי המורכבות חלים על כל מחיר הבסיס של המקטעים, כולל הדונמים מעבר לרצועה. מחיר המינימום נבדק אחרי המקדם ואחרי אחוז סוג המיפוי.</li>" +
+      "<li>3.2: עיבוד לאורתופוטו בלבד = 30% מהמחיר המלא, בלי מחיר מינימום. אזורי המרחק מחיפה ותוספת מצפה רמון הם בחירה אחת. תוספת הקו הירוק מצטרפת אליהם.</li>" +
+      "<li>3.3: המקדמים ו-60% לעדכון חלים רק על המדידה הקרקעית המלאה. תוספת דונמים מעבר לרצועה מופיעה בתעריף רק למסילה קיימת.</li>" +
+      "<li>3.4: מחיר המינימום (₪ 5,000) נבדק אחרי המקדמים.</li>" +
+      "<li>3.5: מספר החלקות הנוספות (מעל החלקה הראשונה) מוזן ישירות. אגרות מפ״י ומודד מבקר מוצגים כהוצאות להחזר, בלי הצמדה" + (P.vatOnExpenses ? "" : " ובלי מע״מ") + ".</li>" +
+      "<li>3.6: החישוב מדורג, כמו הדוגמה בתעריף. התקרה (₪ 20,000) חלה על רכיב השטח בלבד. המינימום (₪ 7,000) על הסכום.</li>" +
+      "<li>סכומים מעוגלים לשקל בכל שורה.</li></ul></details>" +
+      '<p class="fine">מקור: ' + esc(P.source) + ".</p>";
+    return h;
+  }
+};
+function meta(label, val){ return val ? "<div><dt>" + label + "</dt><dd>" + esc(val) + "</dd></div>" : ""; }
+function addInputsTip(text){
+  return '<p class="tip">' + text + (state.services.indexOf("inputs") < 0 ? '<button type="button" class="btn-s" data-action="addSvc" data-id="inputs" data-key="add-inputs">הוספת סעיף 3.7</button>' : "") + "</p>";
+}
+
+/* ---------- render ---------- */
+var stage = document.getElementById("stage");
+function navHtml(){
+  var all = steps(), s = state.step, h = '<div class="nav no-print">';
+  if (s > 0) h += '<button type="button" class="btn ghost" data-action="back" data-key="nav-back">→ חזרה</button>';
+  h += '<span class="spacer"></span>';
+  if (s < all.length - 1){
+    var err = stepError(s);
+    h += '<p class="nav-err" id="nav-err">' + esc(err) + "</p>" +
+      '<button type="button" class="btn primary" id="next" data-action="next" data-key="nav-next"' + (err ? " disabled" : "") + ">" + (s === all.length - 2 ? "לסיכום" : "הבא") + " ←</button>";
+  } else {
+    h += '<button type="button" class="btn ghost" data-action="restart" data-key="nav-restart">חישוב חדש</button>' +
+      '<button type="button" class="btn accent" data-action="print" data-key="nav-print">הדפסה / שמירה כ-PDF</button>';
+  }
+  return h + "</div>";
+}
+function renderStepper(){
+  var all = steps(), h = "";
+  all.forEach(function(st, i){
+    var cur = i === state.step, ok = i <= state.maxStep && canEnter(i);
+    h += '<li class="' + (i < state.step ? "done" : "") + '"><button type="button" data-action="goto" data-step="' + i + '" data-key="st-' + st.id + '"' +
+      (cur ? ' aria-current="step"' : "") + (ok || cur ? "" : " disabled") + ' aria-label="שלב ' + (i + 1) + ": " + st.label + '">' +
+      '<span class="n" aria-hidden="true">' + (i + 1) + '</span><span class="t" aria-hidden="true">' + st.label + "</span></button></li>";
+  });
+  document.getElementById("stepper").innerHTML = h;
+}
+function updateLive(){
+  var r = calcAll(), bar = document.getElementById("bar-in"), cur = steps()[state.step];
+  if (!state.services.length) bar.innerHTML = '<span class="lbl">המחיר יופיע כאן</span><span class="empty">בחרו לפחות שירות אחד</span>';
+  else if (r.errors.length) bar.innerHTML = '<span class="lbl">יש לתקן</span><span class="empty">' + esc(r.errors[0]) + "</span>";
+  else bar.innerHTML = '<span class="lbl">שכר טרחה כולל מע״מ<small>' + r.services.map(function(x){ return x.section; }).join(" + ") +
+    (r.factor !== 1 ? " · צמוד מדד" : " · מחירי תעריף") + (r.expenses ? " · ועוד הוצאות להחזר" : "") + "</small></span>" + '<span class="tot">' + fmt(r.total) + "</span>";
+  // service subtotal box
+  var box = document.getElementById("svc-total");
+  if (box && CALC[cur.id]){
+    var x = CALC[cur.id]();
+    box.innerHTML = x.error ? '<b>סה״כ סעיף ' + P[cur.id].section + '</b><span class="err-msg">' + esc(x.error) + "</span>"
+      : "<b>סה״כ סעיף " + P[cur.id].section + " (לפני מע״מ והצמדה)</b>" + money(x.subtotal || 0);
+  }
+  ["ground", "trees"].forEach(function(k){
+    var el = document.getElementById("seg-line-" + k);
+    if (!el) return;
+    var sf = segFactor(state[k].segs, P[k].complexity);
+    el.className = "calc-line" + (sf.error ? " bad" : "");
+    el.textContent = sf.error ? sf.error : "בלי מקדם: " + qn((1 - sf.used) * 100) + "% מהשטח · מקדם משוקלל: ×" + sf.factor.toFixed(4).replace(/\.?0+$/, "");
+  });
+  var cl = document.getElementById("cpi-line");
+  if (cl){ var f = cpiFactor(); cl.textContent = f === 1 ? "אין הצמדה (חסר מדד)." : "מקדם הצמדה: ×" + f.toFixed(4) + " (" + (f >= 1 ? "+" : "") + pct(f - 1) + ")"; }
+  // nav
+  var next = document.getElementById("next");
+  if (next){ var err = stepError(state.step); next.disabled = !!err; document.getElementById("nav-err").textContent = err; }
+}
+function render(stepChanged){
+  var focusKey = !stepChanged && document.activeElement && document.activeElement.getAttribute("data-key");
+  var all = steps();
+  if (state.step > all.length - 1) state.step = all.length - 1;
+  stage.innerHTML = VIEWS[all[state.step].id]() + navHtml();
+  renderStepper(); updateLive();
+  if (stepChanged){
+    var h2 = stage.querySelector("h2"); if (h2) h2.focus({ preventScroll: true });
+    var top = document.getElementById("stepper").getBoundingClientRect().top + window.pageYOffset - 12;
+    if (window.pageYOffset > top) window.scrollTo(0, top);
+  } else if (focusKey){
+    var el = document.querySelector('[data-key="' + focusKey + '"]'); if (el) el.focus({ preventScroll: true });
+  }
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click", function(e){
+  var b = e.target.closest("[data-action]");
+  if (!b || b.disabled) return;
+  var a = b.getAttribute("data-action");
+  if (a === "svc" || a === "addSvc"){
+    var id = b.getAttribute("data-id"), i = state.services.indexOf(id);
+    if (a === "svc" && i > -1) state.services.splice(i, 1);
+    else if (i < 0) state.services = ORDER.filter(function(x){ return x === id || state.services.indexOf(x) > -1; });
+    state.maxStep = Math.min(state.maxStep, a === "svc" ? 0 : state.maxStep);
+    render(false);
+  } else if (a === "set"){
+    setP(b.getAttribute("data-path"), JSON.parse(b.getAttribute("data-value")));
+    render(false);
+  } else if (a === "add"){
+    var list = b.getAttribute("data-list"); getP(list).push(newRow(list)); render(false);
+  } else if (a === "del"){
+    getP(b.getAttribute("data-list")).splice(+b.getAttribute("data-i"), 1); render(false);
+  } else if (a === "next") go(state.step + 1);
+  else if (a === "back") go(state.step - 1);
+  else if (a === "goto") go(+b.getAttribute("data-step"));
+  else if (a === "print") window.print();
+  else if (a === "restart"){ if (window.confirm("להתחיל חישוב חדש? כל מה שמילאתם יימחק.")) location.reload(); }
+});
+function onField(e){
+  var t = e.target, path = t.getAttribute && t.getAttribute("data-path");
+  if (!path) return;
+  if (t.type === "checkbox"){ if (e.type !== "change") return; setP(path, t.checked); }
+  else setP(path, t.value);
+  if (t.hasAttribute("data-rerender") && e.type === "change") render(false); else updateLive();
+}
+document.addEventListener("input", onField);
+document.addEventListener("change", onField);
+
+document.getElementById("sub").innerHTML = "לפי <b>" + esc(P.source) + "</b>. בוחרים סעיפים, ממלאים כמויות, ומקבלים ניתוח שכר כולל מע״מ.";
+render(false);
+})();
+</script>
+</body>
+</html>
